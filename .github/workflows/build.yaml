@@ -1,0 +1,102 @@
+name: build-dawn
+
+on:
+  workflow_call:
+    inputs:
+      ignore-cache:
+        required: false
+        type: string
+        default: false
+      config:
+        description: 'Controls building in release or debug'
+        required: false
+        type: string
+        default: 'release'
+  workflow_dispatch:
+    inputs:
+      ignore-cache:
+        required: false
+        type: string
+        default: false
+      config:
+        description: 'Controls building in release or debug'
+        required: false
+        type: string
+        default: 'release'
+
+jobs:
+  build-win:
+    runs-on: windows-2022
+    steps:
+      - name: crlf
+        run: |
+          git config --system core.autocrlf false
+          git config --system core.eol lf
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - uses: actions/checkout@v4
+
+      - name: Dawn version
+        id: dawn-version
+        shell: cmd
+        run: |
+          @chcp 65001>nul
+          set /p DAWN_COMMIT=<commit.txt
+          echo DAWN_COMMIT=%DAWN_COMMIT% >> %GITHUB_OUTPUT%
+
+      - name: Cache
+        id: cache-dawn
+        uses: actions/cache@v3
+        if: inputs.ignore-cache != 'true'
+        with:
+          path: build/dawn.out
+          key: dawn-${{ runner.os }}-${{ runner.arch }}-${{ steps.dawn-version.outputs.DAWN_COMMIT }}-${{ inputs.config }}
+
+      - name: Build Dawn
+        if: steps.cache-dawn.outputs.cache-hit != 'true' || inputs.ignore-cache == 'true' 
+        shell: cmd
+        run: python build.py --config=${{ inputs.config }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dawn-windows-x64
+          path: build/dawn.out
+
+  build-mac:
+    strategy:
+      matrix:
+        os: [macos-13, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - uses: actions/checkout@v4
+
+      - name: Dawn version
+        id: dawn-version
+        run: |
+          echo "DAWN_COMMIT=$(cat commit.txt)" >> $GITHUB_OUTPUT
+          ARCH=${{ runner.arch }}
+          echo "LOWERCASE_ARCH=$(echo $ARCH | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Cache
+        id: cache-dawn
+        uses: actions/cache@v3
+        if: inputs.ignore-cache != 'true'
+        with:
+          path: build/dawn.out
+          key: dawn-${{ runner.os }}-${{ runner.arch }}-${{ steps.dawn-version.outputs.DAWN_COMMIT }}-${{ inputs.config }}
+
+      - name: Build Dawn
+        if: steps.cache-dawn.outputs.cache-hit != 'true' || inputs.ignore-cache == 'true' 
+        run: python build.py --config=${{ inputs.config }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dawn-mac-${{steps.dawn-version.outputs.LOWERCASE_ARCH}}
+          path: build/dawn.out

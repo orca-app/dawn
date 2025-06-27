@@ -1,0 +1,39 @@
+name: create-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yaml
+
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          # when name is not specified, all artifacts from this run will be downloaded
+          path: artifacts
+          # merge-multiple: true
+
+      - name: Compress artifacts
+        run: |
+          mkdir release
+          pushd artifacts
+          tar --format=ustar -czf ../release/angle-windows.tar.gz angle-windows
+          tar --format=ustar -czf ../release/angle-mac-x64.tar.gz angle-mac-x64
+          tar --format=ustar -czf ../release/angle-mac-arm64.tar.gz angle-mac-arm64
+
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "release/*"
+          tag: ${{ inputs.tag }}
